@@ -49,7 +49,7 @@ kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/
 cp .env.example .env     # add your MODEL_API_KEY
 
 # 4. Run against one scenario
-python -m provefix.run scenarios/network-policy
+python run.py scenarios/network-policy
 
 # 5. Run the full eval
 python -m provefix.eval.run_all
