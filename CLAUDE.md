@@ -66,7 +66,7 @@ The model sits behind `agent/provider.py`. `get_provider()` picks one from `PROV
 | `MODEL_API_KEY` | — | Muse Spark key. Only needed when `PROVIDER=muse` actually calls the API. |
 | `MUSE_MODEL` | `muse-spark-1.1` | Model string (confirm at onboarding). |
 | `MUSE_BASE_URL` | `https://api.meta.ai/v1` | Meta Model API base URL. |
-| `MUSE_REASONING_EFFORT` | unset | Passed as `reasoning_effort` only if set. |
+| `MUSE_REASONING_EFFORT` | `low` | Passed as `reasoning_effort` on every Muse Spark call. |
 | `KUBE_CONTEXT` | `kind-provefix` | Sandbox cluster; must be a `kind-*` context. |
 
 ## Tech stack

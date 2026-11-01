@@ -83,4 +83,10 @@ def test_muse_reads_env_and_cleans_reply(monkeypatch):
     assert p.generate_fix({"id": "f"}, GOOD, last_error="smoke failed") == GOOD
     assert calls["model"] == "muse-spark-1.3"
     assert calls["max_tokens"] == 3000
+    assert calls["reasoning_effort"] == "low"
     assert "smoke failed" in calls["messages"][1]["content"]
+
+
+def test_muse_reasoning_effort_env_override(monkeypatch):
+    monkeypatch.setenv("MUSE_REASONING_EFFORT", "medium")
+    assert MuseSparkProvider().reasoning_effort == "medium"

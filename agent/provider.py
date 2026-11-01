@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "muse-spark-1.1"
 DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 MAX_TOKENS = 3000
+DEFAULT_REASONING_EFFORT = "low"  # lowest that works; reasoning is billed as output
 
 
 class FixProvider(ABC):
@@ -53,7 +54,7 @@ class MuseSparkProvider(FixProvider):
     def __init__(self):
         self.model = os.environ.get("MUSE_MODEL", DEFAULT_MODEL)
         self.base_url = os.environ.get("MUSE_BASE_URL", DEFAULT_BASE_URL)
-        self.reasoning_effort = os.environ.get("MUSE_REASONING_EFFORT")
+        self.reasoning_effort = os.environ.get("MUSE_REASONING_EFFORT") or DEFAULT_REASONING_EFFORT
         self._client = None
 
     def _get_client(self):
@@ -67,14 +68,11 @@ class MuseSparkProvider(FixProvider):
         return self._client
 
     def _raw_fix(self, finding, manifest, exploit_output, last_error):
-        kwargs = {}
-        if self.reasoning_effort:
-            kwargs["reasoning_effort"] = self.reasoning_effort
         resp = self._get_client().chat.completions.create(
             model=self.model,
             messages=build_messages(finding, manifest, exploit_output, last_error),
             max_tokens=MAX_TOKENS,
-            **kwargs,
+            reasoning_effort=self.reasoning_effort,
         )
         return resp.choices[0].message.content
 
