@@ -1,4 +1,4 @@
-"""The core loop: confirm -> fix -> prove -> retry (CLAUDE.md)."""
+"""The core loop: confirm -> fix -> prove -> retry (DEVELOPMENT.md)."""
 from dataclasses import dataclass, field
 from pathlib import Path
 

@@ -1,6 +1,6 @@
-# CLAUDE.md — ProveFix
+# DEVELOPMENT.md — ProveFix
 
-Context for Claude Code. Read this before writing or changing anything.
+Developer guide for ProveFix. Read this before writing or changing anything.
 
 ## What ProveFix is
 
