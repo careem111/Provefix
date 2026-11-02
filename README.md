@@ -2,67 +2,100 @@ ProveFix
 
 Proven security fixes for Kubernetes.
 
-ProveFix is an AI agent that fixes Kubernetes security misconfigurations and proves each fix actually works — by replaying the real attack before and after the fix, and checking the app still runs — before a human approves it and it opens a pull request.
+ProveFix is an AI agent that fixes a Kubernetes security misconfiguration and then proves the fix actually works — it replays the real attack before and after the fix, and checks the application still runs — so a fix is accepted only when it's verified, not merely assumed.
+
+Built for the Meta Global AI Developer Hackathon · Indie track · Theme: Build for Your World
+
+How the agent is built
+
+ProveFix is written in Python 3.12 and uses Meta's Muse Spark model (muse-spark-1.1), accessed through the Meta Model API, as its reasoning engine. When a fix is needed, the agent sends the security finding and the current Kubernetes manifest to Muse Spark, which writes the corrected manifest. Everything around that call — confirming the problem, checking the fix for cheating, applying it, and proving it — is deterministic code, so the AI's suggestion is always independently verified before it's trusted.
+
+The model integration sits behind a small provider interface, so the same pipeline can run against the live Muse Spark API or against a local stand-in for offline testing. The demo runs against the real Muse Spark API.
+
+Components of the agent
+Provider — talks to Muse Spark via the Meta Model API: builds the prompt, strips formatting, and validates that the reply is well-formed YAML. On a retry it resends the original manifest plus the last error, so the model always knows what to restore.
+Loop — orchestrates the flow: confirm → fix → prove → retry (up to 3 attempts).
+Proof checks — the independent verifiers: an anti-cheat diff, the attack replay (exploit), the application health check (smoke test), and a Kubescape rescan of the relevant control.
+Sandbox — runs everything in an isolated namespace on a local kind cluster. It refuses to start unless Calico is enforcing network policy, rejects manifests that touch cluster-wide resources, and puts a timeout on every command.
+Scenario — a self-contained test case (the vulnerable setup, the attack, the health check, and the finding description).
+
+Tech stack: Python 3.12 · Meta Muse Spark (via Meta Model API) · kind + Calico · Kubescape
 
 The problem
 
-Security scanners flag far more issues than teams can fix. Existing AI fix tools check their own work only by re-scanning, which proves nothing about whether the attack is really stopped or whether the fix quietly broke the application.
+A database running in Kubernetes with no network restriction — any pod in the cluster can connect to it and read its data. In the real world this is an exposed production database: if a single app is compromised, the attacker can reach the database directly. Security scanners flag this kind of issue, but they stop at detection. Even AI fix tools typically check their own work only by re-scanning, which proves nothing about whether the attack is really stopped or whether the fix quietly broke the application.
 
-How ProveFix is different
-Confirms first. Replays the attack before fixing. If the attack doesn't work, the finding is deprioritized — no wasted fix.
-Proves the fix. After fixing, the attack must now fail, the app smoke test must pass, and the change must not delete resources or break selectors.
-Catches cheating. Rejects "fixes" that pass the scanner by deleting the app or blocking all traffic.
-Hidden variants. Validates with exploit variants the model never saw, so a fix can't just satisfy one test.
-Safe by design. Runs only in a local cluster; never touches production; only opens PRs for human approval.
-How it works
-Finding ─► Confirm (attack works?) ─► Fix (Muse Spark) ─► Prove (attack fails? app ok? no damage? clean scan?)
-                                              ▲                        │
-                                              └──── retry ≤ 3 ─────────┘
-                                                                       │
-                                                        Human approves ─► GitHub PR + evidence
-Tech stack
+Mapped to Kubescape control C-0260 (missing NetworkPolicy) · ISO 27001 A.8.22 · SOC 2 CC6.6.
 
-Python 3.12 · Meta Muse Spark (via Meta Model API) · kind + Calico · Kubescape · GitHub CLI
+The fix
 
-Scenarios covered
-Misconfiguration	Attack replayed	Control mapping
-Missing NetworkPolicy	Frontend reaches the DB across namespaces	ISO A.8.22 / SOC 2 CC6.6
-Privileged container	Pod escapes to the node namespace	ISO A.8.2 / SOC 2 CC6.1
-Over-permissioned service account	Pod reads cluster secrets via the API	ISO A.8.2 / SOC 2 CC6.3
-Results
-<!-- Fill in from eval/run_all.py before submitting -->
-Metric	ProveFix	Scanner-only baseline
-Fix success rate	__%	n/a
-Passed scan but still exploitable	__%	__%
-Average attempts per fix	__	n/a
+The agent asks Muse Spark to write a NetworkPolicy — a rule that allows only the legitimate application to reach the database and blocks everything else. Crucially, the fix must satisfy three independent conditions before it's accepted:
+
+the attacker pod can no longer reach the database,
+the legitimate app can still reach it, and
+an independent scanner (Kubescape) agrees the control now passes.
+
+A fix that blocks the attack but breaks the app, or that "passes" by deleting the database, is rejected.
+
+How we tested it in our demo
+
+We ran the full pipeline against the real Muse Spark API on a local kind cluster with Calico enforcing:
+
+bash
+PROVIDER=muse python run.py scenarios/network-policy
+
+The run proceeds as:
+
+Confirm — the agent launches an attacker pod that reads the database's secret. It succeeds, confirming the risk is real.
+Fix — Muse Spark writes a NetworkPolicy.
+Anti-cheat — the agent checks the fix keeps every workload and service intact (so the model can't "fix" it by deleting the database). This runs before anything is applied.
+Prove — the fix is applied to a fresh namespace, then: the attack is replayed and now fails, the smoke test confirms the app is still healthy, and Kubescape confirms control C-0260 now passes.
+Retry — if any check fails, the error is sent back to Muse Spark and it tries again.
+
+What we observed: the model blocked the attack on the very first attempt every time. The extra attempts were only needed to also satisfy Kubescape's exact policy requirements, which the retry loop resolved automatically — reaching a fully clean state (proof level 3) in 2–3 attempts. This is exactly the gap ProveFix is built to catch: a fix can genuinely stop an attack yet still not satisfy a scanner, and only a tool that verifies both the attack and the scan can tell the difference.
+
+A free, offline run using a pre-written fix (no API calls) is also available for testing:
+
+bash
+PROVIDER=mock python run.py scenarios/network-policy
+
+The project also includes 27 passing unit tests.
+
 Quickstart
 bash
-# 1. Prerequisites
-brew install kind kubectl helm trivy gh python@3.12
+# 1. Tools
+brew install kind kubectl
 curl -s https://raw.githubusercontent.com/kubescape/kubescape/master/install.sh | /bin/bash
 
-# 2. Cluster with an enforcing CNI
-kind create cluster --name provefix
+# 2. Cluster with an enforcing CNI (kind's default does NOT enforce NetworkPolicy)
+cat > kind-calico.yaml <<'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  disableDefaultCNI: true
+  podSubnet: "192.168.0.0/16"
+EOF
+kind create cluster --name provefix --config kind-calico.yaml
 kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+# wait until all kube-system pods are Running
 
 # 3. Credentials
-cp .env.example .env     # add your MODEL_API_KEY
+echo "MODEL_API_KEY=your_key_here" > .env
 
-# 4. Run against one scenario
-python run.py scenarios/network-policy
+# 4. Python environment
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
 
-# 5. Run the full eval
-python -m provefix.eval.run_all
-Demo
-<!-- Add the 2–3 min video link before submitting -->
-
-Attack works → human approves → attack fails → app still healthy → PR opens.
-
+# 5. Run the scenario
+set -a; source .env; set +a
+PROVIDER=muse python run.py scenarios/network-policy
 Limitations
 
-ProveFix proves that known attack paths are closed and the app still works. It does not prove a fix is correct in every possible way. Coverage is as good as the exploit and smoke scripts written for each scenario.
+ProveFix proves that a known attack path is closed and the application still works. It does not prove a fix is correct in every possible way; coverage is as good as the attack and health-check scripts written for each scenario. The current demo covers one scenario (missing NetworkPolicy) end to end.
 
 Roadmap
-Adapters for Snyk, Wiz and other scanners (the finding interface is already pluggable)
+More scenarios (privileged container, over-permissioned service account) — the scenario format is already generic
+Automatic finding ingestion from production scanners (Kubescape, Wiz, Snyk) — the finding interface is already pluggable
+Human-approval gate and automatic GitHub pull requests with the proof attached
 Terraform / AWS support, not just Kubernetes
 A GitHub Action so ProveFix runs on every pull request
