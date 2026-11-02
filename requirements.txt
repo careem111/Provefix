@@ -1,0 +1,4 @@
+pyyaml>=6.0
+pytest>=8.0
+# Only needed for PROVIDER=muse
+openai>=1.40

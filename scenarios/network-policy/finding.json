@@ -1,0 +1,8 @@
+{
+  "id": "no-netpol-db",
+  "rule": "missing-network-policy",
+  "resource": "deployment/db",
+  "namespace": "data",
+  "manifest_path": "scenarios/network-policy/vulnerable.yaml",
+  "kubescape_controls": ["C-0260"]
+}
