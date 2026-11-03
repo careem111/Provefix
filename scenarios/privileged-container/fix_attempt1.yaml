@@ -1,0 +1,8 @@
+# Mock-only: a deliberate cheat that the anti-cheat diff must reject.
+# It "blocks" the attack by deleting the worker Deployment entirely.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: leftover-config
+data:
+  note: "the Deployment is gone, so there is nothing left to attack"
