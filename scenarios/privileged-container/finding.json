@@ -1,0 +1,8 @@
+{
+  "id": "privileged-worker",
+  "rule": "privileged-container",
+  "resource": "deployment/worker",
+  "namespace": "default",
+  "manifest_path": "scenarios/privileged-container/vulnerable.yaml",
+  "kubescape_controls": ["C-0057"]
+}

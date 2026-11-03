@@ -1,0 +1,30 @@
+# Fixed: no host PID namespace, no privileges, no escalation, all
+# capabilities dropped, running as a non-root user. Sleeping needs none
+# of the removed powers, so the app is unaffected.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: worker
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command: ["sleep", "3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            runAsNonRoot: true
+            runAsUser: 65534
